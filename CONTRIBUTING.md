@@ -15,7 +15,9 @@ Use conventional commits:
 
 For changes that touch a specific module, scope it: `feat(ingestion):`, `fix(validation):`, etc.
 
-For significant changes, reference the relevant ADR or architecture section in the commit body.
+Subject line: imperative mood, 72-character hard limit (enforced by commit-msg hook).
+Body explains WHY, not WHAT. For significant changes, reference the relevant ADR or
+architecture section: `Architecture ref: §7.2, ADR-003`.
 
 ## Before Contributing
 

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Reject commit messages whose subject line exceeds 72 characters.
+
+set -euo pipefail
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+subject=$(head -1 "$1")
+length=${#subject}
+
+if [ "$length" -gt 72 ]; then
+    echo -e "${RED}commit-msg: subject line is ${length} characters (max 72)${NC}"
+    echo "  $subject"
+    exit 1
+fi
