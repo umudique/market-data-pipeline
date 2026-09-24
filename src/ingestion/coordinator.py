@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from src.domain import BatchStatus, IngestionBatch, IngestionRequest
+from src.domain import BatchStatus, IngestionBatch, IngestionRequest, ValidationIssue
 
 
 class BatchManagerProtocol(Protocol):
@@ -77,12 +77,16 @@ class RawWriterProtocol(Protocol):
     ) -> int: ...
 
 
+class IssueStoreProtocol(Protocol):
+    def save_all(self, issues: list[ValidationIssue]) -> None: ...
+
+
 class ValidationHandoffProtocol(Protocol):
     def validate(
         self,
         batch: IngestionBatch,
         records: list[dict[str, object]],
-    ) -> dict[str, int]: ...
+    ) -> tuple[dict[str, int], list[ValidationIssue]]: ...
 
 
 class IngestionCoordinator:
@@ -97,6 +101,7 @@ class IngestionCoordinator:
         staleness_detector: StalenessDetectorProtocol,
         raw_writer: RawWriterProtocol,
         validation_handoff: ValidationHandoffProtocol,
+        issue_store: IssueStoreProtocol,
     ) -> None:
         self._batch_manager = batch_manager
         self._rate_limit = rate_limit
@@ -105,6 +110,7 @@ class IngestionCoordinator:
         self._staleness_detector = staleness_detector
         self._raw_writer = raw_writer
         self._validation_handoff = validation_handoff
+        self._issue_store = issue_store
 
     def run(self, request: IngestionRequest) -> IngestionBatch:
         """Run the ingestion sequence and return the final batch state."""
@@ -131,7 +137,8 @@ class IngestionCoordinator:
                 )
                 is_stale = self._staleness_detector.is_stale(records, request.end_time)
                 self._raw_writer.write_batch(batch, records)
-                counts = self._validation_handoff.validate(batch, records)
+                counts, issues = self._validation_handoff.validate(batch, records)
+                self._issue_store.save_all(issues)
 
                 totals["received"] += len(records)
                 totals["valid"] += counts["valid"]

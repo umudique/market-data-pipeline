@@ -34,7 +34,7 @@ def _record(timestamp: datetime) -> dict[str, object]:
 
 
 def test_validation_orchestrator_returns_all_count_keys_for_clean_batch() -> None:
-    result = ValidationOrchestrator().validate(
+    counts, issues = ValidationOrchestrator().validate(
         _batch(),
         [
             _record(datetime(2026, 1, 2, 14, 30, tzinfo=UTC)),
@@ -42,25 +42,29 @@ def test_validation_orchestrator_returns_all_count_keys_for_clean_batch() -> Non
         ],
     )
 
-    assert result == {
+    assert counts == {
         "valid": 2,
         "invalid": 0,
         "duplicates": 0,
         "missing_intervals": 0,
         "idempotent_conflicts": 0,
     }
+    assert issues == []
 
 
 def test_validation_orchestrator_counts_duplicate_candles() -> None:
     timestamp = datetime(2026, 1, 2, 14, 30, tzinfo=UTC)
 
-    result = ValidationOrchestrator().validate(_batch(), [_record(timestamp), _record(timestamp)])
+    counts, issues = ValidationOrchestrator().validate(
+        _batch(), [_record(timestamp), _record(timestamp)]
+    )
 
-    assert result["duplicates"] == 1
-    assert set(result) == {
+    assert counts["duplicates"] == 1
+    assert set(counts) == {
         "valid",
         "invalid",
         "duplicates",
         "missing_intervals",
         "idempotent_conflicts",
     }
+    assert len(issues) > 0

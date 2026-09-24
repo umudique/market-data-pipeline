@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from src.domain import BatchStatus, IngestionBatch, IngestionRequest
+from src.domain import BatchStatus, IngestionBatch, IngestionRequest, ValidationIssue
 from src.ingestion.coordinator import IngestionCoordinator
 
 pytestmark = pytest.mark.unit
@@ -104,19 +104,32 @@ class FakeRawWriter:
         return len(records)
 
 
+class FakeIssueStore:
+    def __init__(self) -> None:
+        self.saved: list[ValidationIssue] = []
+
+    def save_all(self, issues: list[ValidationIssue]) -> None:
+        self.saved.extend(issues)
+
+
 class FakeValidationHandoff:
     def __init__(self) -> None:
         self.calls = 0
 
-    def validate(self, batch: IngestionBatch, records: list[dict[str, object]]) -> dict[str, int]:
+    def validate(
+        self,
+        batch: IngestionBatch,
+        records: list[dict[str, object]],
+    ) -> tuple[dict[str, int], list[ValidationIssue]]:
         self.calls += 1
-        return {
+        counts = {
             "valid": len(records),
             "invalid": 0,
             "duplicates": 0,
             "missing_intervals": 0,
             "idempotent_conflicts": 0 if self.calls == 1 else len(records),
         }
+        return counts, []
 
 
 def _request() -> IngestionRequest:
@@ -144,6 +157,7 @@ def test_coordinator_sequence_records_idempotent_conflicts_on_reingestion() -> N
         staleness_detector=FakeStalenessDetector(),
         raw_writer=raw_writer,
         validation_handoff=validation,
+        issue_store=FakeIssueStore(),
     )
 
     first_batch = coordinator.run(_request())

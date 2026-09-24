@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from src.domain import IngestionBatch, IssueSeverity, IssueType
+from src.domain import IngestionBatch, IssueSeverity, IssueType, ValidationIssue
 from src.validation.duplicates import DuplicateDetector
 from src.validation.gaps import IntervalGapDetector
 from src.validation.observations import ObservationValidator
@@ -32,10 +32,10 @@ class ValidationOrchestrator:
         self,
         batch: IngestionBatch,
         records: list[dict[str, Any]],
-    ) -> dict[str, int]:
-        """Return validation summary counts for ingestion batch accounting."""
+    ) -> tuple[dict[str, int], list[ValidationIssue]]:
+        """Return validation counts and all detected issues for the batch."""
         if not records:
-            return self._counts(valid=0, invalid=0, duplicates=0, missing_intervals=0)
+            return self._counts(valid=0, invalid=0, duplicates=0, missing_intervals=0), []
 
         source = batch.source
         ticker = str(records[0].get("ticker", ""))
@@ -75,7 +75,7 @@ class ValidationOrchestrator:
             invalid=invalid,
             duplicates=duplicates,
             missing_intervals=missing_intervals,
-        )
+        ), issues
 
     @staticmethod
     def _parse_requested_range(requested_range: str) -> tuple[datetime, datetime]:

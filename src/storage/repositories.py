@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from src.domain import (
     BatchStatus,
-    EarningsGapResult,
     IngestionBatch,
     IssueSeverity,
     IssueType,
@@ -241,7 +240,7 @@ class ScreenerQueryRepository:
         start: datetime,
         end: datetime,
         lookback_days: int,
-    ) -> list[EarningsGapResult]:
+    ) -> list[MarketBar]:
         statement = (
             select(MarketBarModel)
             .where(
@@ -252,14 +251,4 @@ class ScreenerQueryRepository:
             )
             .order_by(MarketBarModel.ticker, MarketBarModel.timestamp)
         )
-        return [
-            EarningsGapResult(
-                ticker=model.ticker,
-                date=model.timestamp,
-                gap_percent=0.0,
-                relative_volume=0.0,
-                close_return=0.0,
-                validated=model.validated,
-            )
-            for model in self._session.scalars(statement)
-        ]
+        return [MarketBarRepository._to_domain(model) for model in self._session.scalars(statement)]
