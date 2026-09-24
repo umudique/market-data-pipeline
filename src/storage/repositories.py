@@ -173,9 +173,10 @@ class MarketBarRepository:
             insert(MarketBarModel)
             .values(rows)
             .on_conflict_do_nothing(index_elements=["ticker", "timestamp", "interval", "source"])
+            .returning(MarketBarModel.id)
         )
         result = cast(CursorResult[object], self._session.execute(statement))
-        inserted_count = result.rowcount or 0
+        inserted_count = len(result.fetchall())
         return len(bars) - inserted_count
 
     def list_by_ticker(
