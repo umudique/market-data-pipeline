@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import UUID, BigInteger, Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import (
+    UUID,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -18,8 +29,8 @@ class IngestionBatchModel(Base):
     batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     source: Mapped[str] = mapped_column(String(64))
     requested_range: Mapped[str] = mapped_column(String(128))
-    started_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32))
     records_received: Mapped[int] = mapped_column(Integer, default=0)
     records_valid: Mapped[int] = mapped_column(Integer, default=0)
@@ -38,7 +49,7 @@ class RawMarketDataModel(Base):
     source: Mapped[str] = mapped_column(String(64))
     ticker: Mapped[str] = mapped_column(String(32))
     raw_payload: Mapped[str] = mapped_column(Text)
-    received_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ValidationIssueModel(Base):
@@ -49,7 +60,7 @@ class ValidationIssueModel(Base):
     issue_type: Mapped[str] = mapped_column(String(64))
     severity: Mapped[str] = mapped_column(String(16))
     ticker: Mapped[str] = mapped_column(String(32))
-    timestamp: Mapped[DateTime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     source: Mapped[str] = mapped_column(String(64))
     details: Mapped[str] = mapped_column(Text, default="")
 
@@ -59,7 +70,7 @@ class MarketBarModel(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     ticker: Mapped[str] = mapped_column(String(32))
-    timestamp: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     interval: Mapped[str] = mapped_column(String(16))
     open: Mapped[float] = mapped_column(Float)
     high: Mapped[float] = mapped_column(Float)
@@ -73,5 +84,7 @@ class MarketBarModel(Base):
 
     __table_args__ = (
         # ADR-004: idempotency enforced at DB boundary
-        {"UniqueConstraint": ("ticker", "timestamp", "interval", "source")},
+        UniqueConstraint(
+            "ticker", "timestamp", "interval", "source", name="uq_market_bar_identity"
+        ),
     )
