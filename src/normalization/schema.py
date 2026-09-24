@@ -6,5 +6,7 @@ from typing import Any
 
 
 class SchemaNormalizer:
+    _canonical_keys = ("ticker", "timestamp", "open", "high", "low", "close", "volume")
+
     def normalize(self, raw_record: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError
+        return {key: raw_record[key] for key in self._canonical_keys if key in raw_record}

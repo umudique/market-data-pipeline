@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from src.domain import MarketBar
+from src.domain import MarketBar, ValidationStatus
 
 
 class RecordCanonicalizer:
@@ -15,7 +15,20 @@ class RecordCanonicalizer:
         batch_id: uuid.UUID,
         source: str,
     ) -> MarketBar:
-        raise NotImplementedError
+        return MarketBar(
+            ticker=str(record["ticker"]),
+            timestamp=record["timestamp"],
+            interval=str(record["interval"]),
+            open=float(record["open"]),
+            high=float(record["high"]),
+            low=float(record["low"]),
+            close=float(record["close"]),
+            volume=float(record["volume"]),
+            source=source,
+            ingestion_batch_id=batch_id,
+            validated=True,
+            validation_status=ValidationStatus.VALID,
+        )
 
 
 class NormalizationResultBuilder:
@@ -24,4 +37,4 @@ class NormalizationResultBuilder:
         bars: list[MarketBar],
         batch_id: uuid.UUID,
     ) -> list[MarketBar]:
-        raise NotImplementedError
+        return bars

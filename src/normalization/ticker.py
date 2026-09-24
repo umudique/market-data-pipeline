@@ -5,4 +5,4 @@ from __future__ import annotations
 
 class TickerNormalizer:
     def normalize(self, raw_ticker: str) -> str:
-        raise NotImplementedError
+        return raw_ticker.strip().split(":")[-1].upper()
