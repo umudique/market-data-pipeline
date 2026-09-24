@@ -41,6 +41,11 @@ class MarketBarSchema(BaseModel):
     validated: bool
 
 
+class MarketDataResponseSchema(BaseModel):
+    bars: list[MarketBarSchema]
+    total: int
+
+
 class BatchSummarySchema(BaseModel):
     batch_id: str
     source: str
