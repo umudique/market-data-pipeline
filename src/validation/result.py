@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.domain import ValidationIssue, ValidationStatus
+from src.domain import IssueSeverity, ValidationIssue, ValidationStatus
 
 
 @dataclass
@@ -15,4 +15,8 @@ class ValidationResult:
 
 class ValidationResultAggregator:
     def aggregate(self, issues: list[ValidationIssue]) -> ValidationResult:
-        raise NotImplementedError
+        if not issues:
+            return ValidationResult(issues=[], status=ValidationStatus.VALID)
+        if any(issue.severity is IssueSeverity.ERROR for issue in issues):
+            return ValidationResult(issues=issues, status=ValidationStatus.INVALID)
+        return ValidationResult(issues=issues, status=ValidationStatus.FLAGGED)
