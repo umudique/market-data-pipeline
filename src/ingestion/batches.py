@@ -22,15 +22,25 @@ class IngestionBatchManager:
     """
 
     def __init__(self, clock: Callable[[], datetime] = datetime.now) -> None:
-        raise NotImplementedError
+        self._clock = clock
+        self._batches: dict[uuid.UUID, IngestionBatch] = {}
 
     def create(self, request: IngestionRequest) -> IngestionBatch:
         """Create a `PENDING` batch for `request`."""
-        raise NotImplementedError
+        batch = IngestionBatch(
+            source=request.source,
+            requested_range=f"{request.start_time.isoformat()}/{request.end_time.isoformat()}",
+            started_at=self._clock(),
+            status=BatchStatus.PENDING,
+        )
+        self._batches[batch.batch_id] = batch
+        return batch
 
     def mark_completed(self, batch_id: uuid.UUID, status: BatchStatus) -> None:
         """Move a batch to a terminal lifecycle status."""
-        raise NotImplementedError
+        batch = self._get_batch(batch_id)
+        batch.status = status
+        batch.completed_at = self._clock()
 
     def record_counts(
         self,
@@ -45,4 +55,17 @@ class IngestionBatchManager:
         idempotent_conflicts: int,
     ) -> None:
         """Persist all received, quality-defect, and conflict counters."""
-        raise NotImplementedError
+        batch = self._get_batch(batch_id)
+        batch.records_received = received
+        batch.records_valid = valid
+        batch.records_invalid = invalid
+        batch.duplicate_count = duplicates
+        batch.missing_interval_count = missing_intervals
+        batch.stale_response_count = stale_responses
+        batch.idempotent_conflict_count = idempotent_conflicts
+
+    def _get_batch(self, batch_id: uuid.UUID) -> IngestionBatch:
+        try:
+            return self._batches[batch_id]
+        except KeyError as exc:
+            raise KeyError(f"unknown ingestion batch: {batch_id}") from exc

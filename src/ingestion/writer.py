@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from src.domain import IngestionBatch
 
 
+@dataclass
 class RawRecordWriter:
     """Persist source payloads to the raw/staging boundary.
 
@@ -17,10 +20,15 @@ class RawRecordWriter:
         storage. This component never writes to trusted `market_bars`.
     """
 
+    staged_records: list[tuple[IngestionBatch, list[dict[str, object]]]] = field(
+        default_factory=list
+    )
+
     def write_batch(
         self,
         batch: IngestionBatch,
         records: list[dict[str, object]],
     ) -> int:
         """Persist raw records for `batch` and return the staged count."""
-        raise NotImplementedError
+        self.staged_records.append((batch, records))
+        return len(records)

@@ -12,9 +12,77 @@ Invariants:
 
 from __future__ import annotations
 
-from typing import Any
+import uuid
+from datetime import datetime
+from typing import Protocol
 
-from src.domain import IngestionBatch, IngestionRequest
+from src.domain import BatchStatus, IngestionBatch, IngestionRequest
+
+
+class BatchManagerProtocol(Protocol):
+    def create(self, request: IngestionRequest) -> IngestionBatch: ...
+
+    def record_counts(
+        self,
+        batch_id: uuid.UUID,
+        *,
+        received: int,
+        valid: int,
+        invalid: int,
+        duplicates: int,
+        missing_intervals: int,
+        stale_responses: int,
+        idempotent_conflicts: int,
+    ) -> None: ...
+
+    def mark_completed(self, batch_id: uuid.UUID, status: BatchStatus) -> None: ...
+
+
+class RateLimitProtocol(Protocol):
+    def acquire(self) -> None: ...
+
+
+class RetryPolicyProtocol(Protocol):
+    def execute(
+        self,
+        fn: object,
+        *args: object,
+        **kwargs: object,
+    ) -> list[dict[str, object]]: ...
+
+
+class MarketDataClientProtocol(Protocol):
+    def fetch(
+        self,
+        ticker: str,
+        interval: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[dict[str, object]]: ...
+
+
+class StalenessDetectorProtocol(Protocol):
+    def is_stale(
+        self,
+        response_bars: list[dict[str, object]],
+        requested_end: datetime,
+    ) -> bool: ...
+
+
+class RawWriterProtocol(Protocol):
+    def write_batch(
+        self,
+        batch: IngestionBatch,
+        records: list[dict[str, object]],
+    ) -> int: ...
+
+
+class ValidationHandoffProtocol(Protocol):
+    def validate(
+        self,
+        batch: IngestionBatch,
+        records: list[dict[str, object]],
+    ) -> dict[str, int]: ...
 
 
 class IngestionCoordinator:
@@ -22,16 +90,61 @@ class IngestionCoordinator:
 
     def __init__(
         self,
-        batch_manager: Any,
-        rate_limit: Any,
-        retry_policy: Any,
-        client: Any,
-        staleness_detector: Any,
-        raw_writer: Any,
-        validation_handoff: Any,
+        batch_manager: BatchManagerProtocol,
+        rate_limit: RateLimitProtocol,
+        retry_policy: RetryPolicyProtocol,
+        client: MarketDataClientProtocol,
+        staleness_detector: StalenessDetectorProtocol,
+        raw_writer: RawWriterProtocol,
+        validation_handoff: ValidationHandoffProtocol,
     ) -> None:
-        raise NotImplementedError
+        self._batch_manager = batch_manager
+        self._rate_limit = rate_limit
+        self._retry_policy = retry_policy
+        self._client = client
+        self._staleness_detector = staleness_detector
+        self._raw_writer = raw_writer
+        self._validation_handoff = validation_handoff
 
     def run(self, request: IngestionRequest) -> IngestionBatch:
         """Run the ingestion sequence and return the final batch state."""
-        raise NotImplementedError
+        batch = self._batch_manager.create(request)
+        totals = {
+            "received": 0,
+            "valid": 0,
+            "invalid": 0,
+            "duplicates": 0,
+            "missing_intervals": 0,
+            "stale_responses": 0,
+            "idempotent_conflicts": 0,
+        }
+
+        try:
+            for ticker in request.ticker_universe:
+                self._rate_limit.acquire()
+                records = self._retry_policy.execute(
+                    self._client.fetch,
+                    ticker,
+                    request.interval,
+                    request.start_time,
+                    request.end_time,
+                )
+                is_stale = self._staleness_detector.is_stale(records, request.end_time)
+                self._raw_writer.write_batch(batch, records)
+                counts = self._validation_handoff.validate(batch, records)
+
+                totals["received"] += len(records)
+                totals["valid"] += counts["valid"]
+                totals["invalid"] += counts["invalid"]
+                totals["duplicates"] += counts["duplicates"]
+                totals["missing_intervals"] += counts["missing_intervals"]
+                totals["stale_responses"] += int(is_stale)
+                totals["idempotent_conflicts"] += counts["idempotent_conflicts"]
+
+            self._batch_manager.record_counts(batch.batch_id, **totals)
+            self._batch_manager.mark_completed(batch.batch_id, BatchStatus.COMPLETED)
+        except Exception:
+            self._batch_manager.mark_completed(batch.batch_id, BatchStatus.FAILED)
+            raise
+
+        return batch
