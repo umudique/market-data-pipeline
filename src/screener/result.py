@@ -13,4 +13,11 @@ class ScreenerResultMapper:
         relative_volume: float,
         close_return: float,
     ) -> EarningsGapResult:
-        raise NotImplementedError
+        return EarningsGapResult(
+            ticker=bar.ticker,
+            date=bar.timestamp,
+            gap_percent=gap_percent,
+            relative_volume=relative_volume,
+            close_return=close_return,
+            validated=bar.validated,
+        )

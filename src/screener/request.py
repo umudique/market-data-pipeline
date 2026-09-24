@@ -8,4 +8,5 @@ from src.domain import EarningsGapScreenerRequest
 class ScreenerRequestValidator:
     def validate(self, request: EarningsGapScreenerRequest) -> None:
         """Raise ValueError on invalid parameters."""
-        raise NotImplementedError
+        if request.end_date < request.start_date:
+            raise ValueError("end_date must be greater than or equal to start_date")
