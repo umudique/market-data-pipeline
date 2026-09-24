@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: market
+      POSTGRES_PASSWORD: market
+      POSTGRES_DB: market_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U market -d market_data"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://market:market@postgres:5432/market_data
+      CANONICAL_TIMEZONE: UTC
+      MAX_RETRIES: "3"
+      RATE_LIMIT_CALLS_PER_MINUTE: "5"
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    volumes:
+      - .:/app
+    command: >
+      sh -c "uv run alembic upgrade head &&
+             uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:

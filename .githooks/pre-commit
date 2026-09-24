@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# market-data-pipeline pre-commit hook
+# Target: < 30 seconds
+# Coverage and thorough tests run in CI only.
+#
+# Install: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+pass() { echo -e "${GREEN}  ✓${NC} $1"; }
+fail() { echo -e "${RED}  ✗${NC} $1"; exit 1; }
+
+echo "market-data-pipeline pre-commit"
+echo "────────────────────────────────"
+
+printf "[1/4] format  "
+if uv run ruff format --check . >/dev/null 2>&1; then
+    pass "ok"
+else
+    echo ""
+    uv run ruff format --check . 2>&1 | head -20
+    fail "formatting errors — run: uv run ruff format ."
+fi
+
+printf "[2/4] lint    "
+if uv run ruff check . >/dev/null 2>&1; then
+    pass "ok"
+else
+    echo ""
+    uv run ruff check . 2>&1 | head -20
+    fail "lint errors — run: uv run ruff check . --fix"
+fi
+
+printf "[3/4] mypy    "
+if uv run mypy src >/dev/null 2>&1; then
+    pass "ok"
+else
+    echo ""
+    uv run mypy src 2>&1 | tail -20
+    fail "type errors — run: uv run mypy src"
+fi
+
+printf "[4/4] pytest  "
+uv run pytest -m "not integration" -q >/dev/null 2>&1 || code=$?
+code=${code:-0}
+if [ $code -eq 0 ] || [ $code -eq 5 ]; then
+    pass "ok"
+else
+    echo ""
+    uv run pytest -m "not integration" -q 2>&1 | tail -20
+    fail "unit tests failed — run: uv run pytest -m 'not integration'"
+fi
+
+echo "────────────────────────────────"
+echo -e "${GREEN}pre-commit passed${NC}"
