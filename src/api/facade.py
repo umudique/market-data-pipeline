@@ -131,6 +131,7 @@ class ApplicationServiceFacade:
         return IngestionBatchResponseSchema(
             batch_id=str(batch.batch_id),
             status=batch.status.value,
+            ingestion_verdict=_ingestion_verdict(batch),
             records_received=batch.records_received,
             records_valid=batch.records_valid,
             records_invalid=batch.records_invalid,
@@ -148,3 +149,11 @@ class ApplicationServiceFacade:
             timestamp=issue.timestamp,
             details=issue.details,
         )
+
+
+def _ingestion_verdict(batch: IngestionBatch) -> str:
+    if batch.records_received > 0 and batch.records_valid == 0:
+        return "REJECTED"
+    if batch.records_invalid > 0:
+        return "PASSED WITH ISSUES"
+    return "PASSED"

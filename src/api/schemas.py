@@ -18,6 +18,7 @@ class IngestionRequestSchema(BaseModel):
 class IngestionBatchResponseSchema(BaseModel):
     batch_id: str
     status: str
+    ingestion_verdict: str
     records_received: int
     records_valid: int
     records_invalid: int
