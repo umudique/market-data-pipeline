@@ -7,6 +7,25 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class IngestionRequestSchema(BaseModel):
+    ticker_universe: list[str]
+    interval: str
+    start_time: datetime
+    end_time: datetime
+    source: str = "yfinance"
+
+
+class IngestionBatchResponseSchema(BaseModel):
+    batch_id: str
+    status: str
+    records_received: int
+    records_valid: int
+    records_invalid: int
+    duplicate_count: int
+    missing_interval_count: int
+    stale_response_count: int
+
+
 class ScreenerRequestSchema(BaseModel):
     start_date: datetime
     end_date: datetime

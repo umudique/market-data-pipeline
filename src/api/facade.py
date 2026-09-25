@@ -6,12 +6,20 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from src.domain import EarningsGapScreenerRequest, IngestionBatch, MarketBar, ValidationIssue
+from src.domain import (
+    EarningsGapScreenerRequest,
+    IngestionBatch,
+    IngestionRequest,
+    MarketBar,
+    ValidationIssue,
+)
 from src.screener.earnings_gap import EarningsGapQueryService
 
 from .schemas import (
     BatchSummarySchema,
     EarningsGapResultSchema,
+    IngestionBatchResponseSchema,
+    IngestionRequestSchema,
     MarketBarSchema,
     MarketDataResponseSchema,
     ScreenerRequestSchema,
@@ -21,8 +29,27 @@ from .schemas import (
 
 
 class ApplicationServiceFacade:
-    def __init__(self, uow: Any) -> None:
+    def __init__(self, uow: Any, ingestion_coordinator: Any | None = None) -> None:
         self._uow = uow
+        self._ingestion_coordinator = ingestion_coordinator
+
+    def run_ingestion(self, request: IngestionRequestSchema) -> IngestionBatchResponseSchema:
+        """Map the HTTP schema to the canonical domain request and delegate ingestion."""
+        if not request.ticker_universe:
+            raise ValueError("ticker_universe must not be empty")
+        if self._ingestion_coordinator is None:
+            raise ValueError("ingestion coordinator is not configured")
+
+        batch = self._ingestion_coordinator.run(
+            IngestionRequest(
+                ticker_universe=request.ticker_universe,
+                interval=request.interval,
+                start_time=request.start_time,
+                end_time=request.end_time,
+                source=request.source,
+            )
+        )
+        return self._ingestion_batch_schema(batch)
 
     def run_earnings_gap(self, request: ScreenerRequestSchema) -> ScreenerResponseSchema:
         results = EarningsGapQueryService(self._uow.screener).run(
@@ -90,6 +117,19 @@ class ApplicationServiceFacade:
         return BatchSummarySchema(
             batch_id=str(batch.batch_id),
             source=batch.source,
+            status=batch.status.value,
+            records_received=batch.records_received,
+            records_valid=batch.records_valid,
+            records_invalid=batch.records_invalid,
+            duplicate_count=batch.duplicate_count,
+            missing_interval_count=batch.missing_interval_count,
+            stale_response_count=batch.stale_response_count,
+        )
+
+    @staticmethod
+    def _ingestion_batch_schema(batch: IngestionBatch) -> IngestionBatchResponseSchema:
+        return IngestionBatchResponseSchema(
+            batch_id=str(batch.batch_id),
             status=batch.status.value,
             records_received=batch.records_received,
             records_valid=batch.records_valid,
