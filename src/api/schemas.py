@@ -13,6 +13,9 @@ class IngestionRequestSchema(BaseModel):
     start_time: datetime
     end_time: datetime
     source: str = "yfinance"
+    exchange: str | None = None
+    custom_url: str | None = None
+    api_key: str | None = None
 
 
 class IngestionBatchResponseSchema(BaseModel):
@@ -25,6 +28,8 @@ class IngestionBatchResponseSchema(BaseModel):
     duplicate_count: int
     missing_interval_count: int
     stale_response_count: int
+    idempotent_conflict_count: int = 0
+    validation_issues: list[ValidationIssueSummarySchema] = []
 
 
 class ScreenerRequestSchema(BaseModel):
@@ -70,6 +75,10 @@ class BatchSummarySchema(BaseModel):
     batch_id: str
     source: str
     status: str
+    ticker_universe: str = ""
+    interval: str = ""
+    requested_range: str = ""
+    started_at: datetime | None = None
     records_received: int
     records_valid: int
     records_invalid: int

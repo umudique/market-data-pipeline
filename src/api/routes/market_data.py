@@ -13,6 +13,12 @@ from src.api.schemas import MarketDataResponseSchema
 router = APIRouter(prefix="/market-data", tags=["market-data"])
 
 
+@router.get("/tickers", response_model=list[str])
+def list_tickers(uow: object = Depends(get_unit_of_work)) -> list[str]:
+    """Return distinct ticker symbols present in the canonical store."""
+    return ApplicationServiceFacade(uow).list_tickers()
+
+
 @router.get("", response_model=MarketDataResponseSchema)
 def get_market_data(
     ticker: str = Query(...),

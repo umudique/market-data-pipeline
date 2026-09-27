@@ -10,15 +10,22 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from src.config import settings
-from src.domain import BatchStatus, IngestionBatch, IngestionRequest
+from src.domain import BatchStatus, IngestionBatch, IngestionRequest, IssueSeverity, ValidationIssue
 from src.ingestion.batches import IngestionBatchManager
 from src.ingestion.client import MarketDataClient
-from src.ingestion.coordinator import IngestionCoordinator, RetryPolicyProtocol
+from src.ingestion.coordinator import (
+    IngestionCoordinator,
+    MarketDataClientProtocol,
+    RetryPolicyProtocol,
+)
+from src.ingestion.custom_http_client import CustomHttpClient
 from src.ingestion.rate_limit import RateLimitController
 from src.ingestion.retry import RetryPolicy
 from src.ingestion.staleness import StalenessDetector
 from src.ingestion.writer import RawRecordWriter
+from src.normalization.canonical import RecordCanonicalizer
 from src.storage.database import get_session
+from src.storage.repositories import MarketBarRepository
 from src.storage.unit_of_work import UnitOfWork
 from src.validation.orchestrator import ValidationOrchestrator
 
@@ -66,6 +73,27 @@ class _PersistedBatchManager:
         self._repository.update(self._batches[batch_id])
 
 
+class NormalizationAndStorageService:
+    def __init__(self, market_bars: MarketBarRepository) -> None:
+        self._market_bars = market_bars
+        self._canonicalizer = RecordCanonicalizer()
+
+    def normalize_and_store(
+        self,
+        batch: IngestionBatch,
+        records: list[dict[str, object]],
+        issues: list[ValidationIssue],
+    ) -> int:
+        error_timestamps = {i.timestamp for i in issues if i.severity is IssueSeverity.ERROR}
+        valid_records = [r for r in records if r.get("timestamp") not in error_timestamps]
+        if not valid_records:
+            return 0
+        bars = [
+            self._canonicalizer.canonicalize(r, batch.batch_id, batch.source) for r in valid_records
+        ]
+        return self._market_bars.upsert_all(bars)
+
+
 def get_db() -> Generator[Session, None, None]:
     session = get_session()
     try:
@@ -82,7 +110,15 @@ def get_unit_of_work() -> Generator[UnitOfWork, None, None]:
 def get_ingestion_coordinator(
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> IngestionCoordinator:
-    """Assemble the ingestion use case from existing component implementations."""
+    """Assemble the ingestion coordinator with the yfinance client (default)."""
+    return build_ingestion_coordinator(uow, MarketDataClient(source="yfinance"))
+
+
+def build_ingestion_coordinator(
+    uow: UnitOfWork,
+    client: MarketDataClientProtocol,
+) -> IngestionCoordinator:
+    """Assemble the ingestion use case with the given market data client."""
     return IngestionCoordinator(
         batch_manager=_PersistedBatchManager(IngestionBatchManager(), uow.ingestion_batches),
         rate_limit=RateLimitController(settings.rate_limit_calls_per_minute),
@@ -90,9 +126,21 @@ def get_ingestion_coordinator(
             RetryPolicyProtocol,
             RetryPolicy(max_attempts=settings.max_retries, backoff_seconds=0.0),
         ),
-        client=MarketDataClient(source="yfinance"),
+        client=client,
         staleness_detector=StalenessDetector(),
         raw_writer=RawRecordWriter(uow.raw_market_data),
         validation_handoff=ValidationOrchestrator(),
         issue_store=uow.validation_issues,
+        normalization_handoff=NormalizationAndStorageService(uow.market_bars),
     )
+
+
+def build_client_for_request(
+    source: str, custom_url: str | None, api_key: str | None
+) -> MarketDataClientProtocol:
+    """Return the appropriate market data client based on the source."""
+    if source == "custom":
+        if not custom_url:
+            raise ValueError("custom_url is required when source is 'custom'")
+        return CustomHttpClient(url_template=custom_url, api_key=api_key)
+    return MarketDataClient(source=source)

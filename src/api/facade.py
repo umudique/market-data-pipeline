@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain import (
     EarningsGapScreenerRequest,
@@ -13,6 +13,7 @@ from src.domain import (
     MarketBar,
     ValidationIssue,
 )
+from src.ingestion.custom_http_client import custom_source_id
 from src.screener.earnings_gap import EarningsGapQueryService
 
 from .schemas import (
@@ -40,13 +41,22 @@ class ApplicationServiceFacade:
         if self._ingestion_coordinator is None:
             raise ValueError("ingestion coordinator is not configured")
 
+        source = (
+            custom_source_id(request.custom_url)
+            if request.source == "custom" and request.custom_url is not None
+            else request.source
+        )
+
         batch = self._ingestion_coordinator.run(
             IngestionRequest(
                 ticker_universe=request.ticker_universe,
                 interval=request.interval,
                 start_time=request.start_time,
                 end_time=request.end_time,
-                source=request.source,
+                source=source,
+                exchange=request.exchange,
+                custom_url=request.custom_url,
+                api_key=request.api_key,
             )
         )
         return self._ingestion_batch_schema(batch)
@@ -74,6 +84,9 @@ class ApplicationServiceFacade:
         ]
         return ScreenerResponseSchema(results=mapped, total=len(mapped))
 
+    def list_tickers(self) -> list[str]:
+        return cast(list[str], self._uow.market_bars.list_tickers())
+
     def list_market_data(
         self,
         ticker: str,
@@ -91,6 +104,11 @@ class ApplicationServiceFacade:
         return [
             self._batch_schema(batch) for batch in self._uow.ingestion_batches.list_recent(limit)
         ]
+
+    def delete_batch(self, batch_id: uuid.UUID) -> None:
+        raise ValueError(
+            f"batch deletion is disabled to preserve the validation audit trail: {batch_id}"
+        )
 
     def list_issues(self, batch_id: uuid.UUID) -> list[ValidationIssueSummarySchema]:
         return [
@@ -118,6 +136,10 @@ class ApplicationServiceFacade:
             batch_id=str(batch.batch_id),
             source=batch.source,
             status=batch.status.value,
+            ticker_universe=batch.ticker_universe,
+            interval=batch.interval,
+            requested_range=batch.requested_range,
+            started_at=batch.started_at,
             records_received=batch.records_received,
             records_valid=batch.records_valid,
             records_invalid=batch.records_invalid,
@@ -138,6 +160,7 @@ class ApplicationServiceFacade:
             duplicate_count=batch.duplicate_count,
             missing_interval_count=batch.missing_interval_count,
             stale_response_count=batch.stale_response_count,
+            idempotent_conflict_count=batch.idempotent_conflict_count,
         )
 
     @staticmethod
@@ -154,6 +177,12 @@ class ApplicationServiceFacade:
 def _ingestion_verdict(batch: IngestionBatch) -> str:
     if batch.records_received > 0 and batch.records_valid == 0:
         return "REJECTED"
-    if batch.records_invalid > 0:
+    total_issues = (
+        batch.records_invalid
+        + batch.missing_interval_count
+        + batch.duplicate_count
+        + batch.stale_response_count
+    )
+    if total_issues > 0:
         return "PASSED WITH ISSUES"
     return "PASSED"

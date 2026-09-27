@@ -29,3 +29,12 @@ def list_issues(
 ) -> list[ValidationIssueSummarySchema]:
     """Return persisted validation issues for a batch."""
     return ApplicationServiceFacade(uow).list_issues(batch_id)
+
+
+@router.delete("/batches/{batch_id}", status_code=204)
+def delete_batch(
+    batch_id: uuid.UUID,
+    uow: object = Depends(get_unit_of_work),
+) -> None:
+    """Delete an ingestion batch record and its validation issues."""
+    ApplicationServiceFacade(uow).delete_batch(batch_id)
