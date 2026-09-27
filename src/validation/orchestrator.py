@@ -53,6 +53,7 @@ class ValidationOrchestrator:
                 ticker=ticker,
                 batch_id=batch.batch_id,
                 source=source,
+                exchange=batch.exchange,
             )
         )
         issues.extend(TimestampValidator().validate(records, batch.batch_id, source))
@@ -61,9 +62,23 @@ class ValidationOrchestrator:
         issues.extend(
             TimezoneValidator(canonical_timezone="UTC").validate(records, batch.batch_id, source)
         )
-        issues.extend(StaleDataValidator().validate(records, expected_end, batch.batch_id, source))
+        issues.extend(
+            StaleDataValidator().validate(
+                records,
+                expected_end,
+                batch.batch_id,
+                source,
+                exchange=batch.exchange,
+                interval=interval,
+            )
+        )
 
-        invalid = sum(1 for issue in issues if issue.severity is IssueSeverity.ERROR)
+        error_records = {
+            (issue.ticker, issue.timestamp)
+            for issue in issues
+            if issue.severity is IssueSeverity.ERROR
+        }
+        invalid = len(error_records)
         duplicates = sum(1 for issue in issues if issue.issue_type is IssueType.DUPLICATE_CANDLE)
         missing_intervals = sum(
             1 for issue in issues if issue.issue_type is IssueType.MISSING_INTERVAL

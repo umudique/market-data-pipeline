@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from typing import Any
+from datetime import UTC, date, datetime, timedelta
+from typing import Any, cast
 
 from src.domain import IssueSeverity, IssueType, ValidationIssue
 
@@ -16,6 +16,8 @@ class StaleDataValidator:
         requested_end: datetime,
         batch_id: uuid.UUID,
         source: str,
+        exchange: str | None = None,
+        interval: str = "1m",
     ) -> list[ValidationIssue]:
         if not records:
             return []
@@ -29,8 +31,13 @@ class StaleDataValidator:
             return []
 
         latest_timestamp = max(timestamps)
-        if latest_timestamp >= requested_end:
-            return []
+        if _is_daily_or_longer(interval):
+            threshold = _last_expected_session(requested_end.date(), exchange)
+            if latest_timestamp.date() >= threshold:
+                return []
+        else:
+            if _to_utc(latest_timestamp) >= _to_utc(requested_end):
+                return []
 
         return [
             ValidationIssue(
@@ -43,3 +50,31 @@ class StaleDataValidator:
                 details="latest response bar is older than requested end",
             )
         ]
+
+
+def _to_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _is_daily_or_longer(interval: str) -> bool:
+    return interval.endswith("d") or interval.endswith("wk") or interval.endswith("mo")
+
+
+def _last_expected_session(end_date: date, exchange: str | None) -> date:
+    if exchange:
+        try:
+            import exchange_calendars as ec
+            import pandas as pd
+
+            cal = ec.get_calendar(exchange)
+            return cast(
+                date, cal.date_to_session(pd.Timestamp(end_date), direction="previous").date()
+            )
+        except Exception:
+            pass
+    d = end_date
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
