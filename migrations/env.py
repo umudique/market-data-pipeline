@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from src.config import settings
 from src.storage.models import Base
 
 config = context.config
@@ -14,8 +14,8 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Read DATABASE_URL from environment (set via .env / docker-compose / CI secret).
-database_url = os.environ["DATABASE_URL"]
+# Read DATABASE_URL through project settings so local Alembic commands honor .env.
+database_url = settings.database_url
 config.set_main_option("sqlalchemy.url", database_url)
 
 
