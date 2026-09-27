@@ -43,6 +43,35 @@ def _bar(batch_id: uuid.UUID, timestamp: datetime | None = None) -> MarketBar:
     )
 
 
+def test_market_bar_repository_list_tickers_returns_distinct_sorted(engine: Engine) -> None:
+    batch_id = uuid.uuid4()
+    bars = [
+        MarketBar(
+            ticker=t,
+            timestamp=datetime(2026, 1, 2, 14, 30, tzinfo=UTC),
+            interval="1d",
+            open=100.0,
+            high=102.0,
+            low=99.0,
+            close=101.0,
+            volume=1000.0,
+            source="yfinance",
+            ingestion_batch_id=batch_id,
+            validated=True,
+            validation_status=ValidationStatus.VALID,
+        )
+        for t in ["TSLA", "AAPL", "MSFT", "AAPL"]  # AAPL duplicate intentional
+    ]
+
+    with Session(engine) as session:
+        repository = MarketBarRepository(session)
+        repository.upsert_all(bars)
+        session.commit()
+        tickers = repository.list_tickers()
+
+    assert tickers == ["AAPL", "MSFT", "TSLA"]
+
+
 def test_market_bar_repository_upsert_counts_idempotent_conflicts(engine: Engine) -> None:
     batch_id = uuid.uuid4()
     bars = [

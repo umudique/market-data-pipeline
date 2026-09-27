@@ -10,11 +10,23 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
-from src.api.dependencies import get_ingestion_coordinator, get_unit_of_work  # noqa: E402
+from src.api.dependencies import (  # noqa: E402
+    _PersistedBatchManager,
+    get_ingestion_coordinator,
+    get_unit_of_work,
+)
 from src.api.facade import ApplicationServiceFacade  # noqa: E402
 from src.api.main import app  # noqa: E402
 from src.api.schemas import IngestionRequestSchema  # noqa: E402
-from src.domain import BatchStatus, IngestionBatch, IngestionRequest  # noqa: E402
+from src.domain import (
+    BatchStatus,
+    IngestionBatch,
+    IngestionRequest,
+    IssueSeverity,
+    IssueType,
+    ValidationIssue,
+)  # noqa: E402
+from src.ingestion.custom_http_client import custom_source_id  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -209,3 +221,77 @@ def test_ingest_facade_delegates_to_coordinator() -> None:
         )
     )
     assert not facade._uow.method_calls
+
+
+def test_ingest_facade_distinguishes_custom_source_by_url() -> None:
+    coordinator = MagicMock()
+    coordinator.run.return_value = IngestionBatch(status=BatchStatus.COMPLETED)
+    facade = ApplicationServiceFacade(MagicMock(), ingestion_coordinator=coordinator)
+    request = IngestionRequestSchema(
+        ticker_universe=["AAPL"],
+        interval="1d",
+        start_time=datetime.fromisoformat("2026-01-02T00:00:00+00:00"),
+        end_time=datetime.fromisoformat("2026-01-03T00:00:00+00:00"),
+        source="custom",
+        custom_url="https://vendor-a.example/{ticker}",
+    )
+
+    facade.run_ingestion(request)
+
+    sent_request = coordinator.run.call_args.args[0]
+    assert sent_request.source == custom_source_id("https://vendor-a.example/{ticker}")
+
+
+def test_delete_batch_is_rejected_to_preserve_audit_trail() -> None:
+    facade = ApplicationServiceFacade(MagicMock())
+
+    with pytest.raises(ValueError, match="audit trail"):
+        facade.delete_batch(uuid.uuid4())
+
+
+def test_failed_batch_status_uses_outer_repository_without_separate_session() -> None:
+    repository = MagicMock()
+    manager = _PersistedBatchManager(MagicMock(), repository)
+    batch_id = uuid.uuid4()
+    manager._batches[batch_id] = IngestionBatch(batch_id=batch_id)
+
+    manager.mark_completed(batch_id, BatchStatus.FAILED)
+
+    repository.update.assert_called_once_with(manager._batches[batch_id])
+
+
+def test_ingest_response_embeds_validation_issues_from_same_session(
+    client: TestClient,
+    override_uow: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    batch_id = uuid.uuid4()
+    completed_batch = IngestionBatch(batch_id=batch_id, status=BatchStatus.COMPLETED)
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.run.return_value = completed_batch
+    monkeypatch.setattr(
+        "src.api.routes.ingest.build_ingestion_coordinator",
+        lambda *a, **k: mock_coordinator,
+    )
+
+    from datetime import UTC, datetime
+
+    issue = ValidationIssue(
+        issue_type=IssueType.MISSING_INTERVAL,
+        severity=IssueSeverity.WARNING,
+        ticker="AAPL",
+        timestamp=datetime(2026, 1, 2, tzinfo=UTC),
+        batch_id=batch_id,
+        source="yfinance",
+    )
+    override_uow.validation_issues.list_by_batch.return_value = [issue]
+
+    response = client.post("/ingest", json=_VALID_INGESTION_PAYLOAD)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "validation_issues" in body
+    assert len(body["validation_issues"]) == 1
+    assert body["validation_issues"][0]["issue_type"] == IssueType.MISSING_INTERVAL.value
+    override_uow.commit.assert_called_once()
