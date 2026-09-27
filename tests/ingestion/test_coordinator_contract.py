@@ -91,7 +91,13 @@ class FakeClient:
 
 
 class FakeStalenessDetector:
-    def is_stale(self, response_bars: list[dict[str, object]], requested_end: datetime) -> bool:
+    def is_stale(
+        self,
+        response_bars: list[dict[str, object]],
+        requested_end: datetime,
+        interval: str = "1m",
+        exchange: str | None = None,
+    ) -> bool:
         return False
 
 
