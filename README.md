@@ -10,7 +10,7 @@ A financial market-data pipeline that validates, normalizes, persists, and audit
 
 Raw OHLCV data from public providers contains a range of silent defects: duplicate candles, missing intervals, stale responses that arrive as HTTP 200, prices that violate OHLC relationships, and timezone inconsistencies. Analytics that consume this data inherit those defects without knowing it.
 
-This pipeline intercepts every ingestion request, validates the response against a set of explicit data-quality rules, and persists a structured record of every defect it finds. Data that passes validation is stored as trusted bars, available for downstream use. Defects are recorded and visible — never silently repaired.
+This pipeline intercepts every ingestion request, validates the response against a set of explicit data-quality rules, and persists a structured record of every defect it finds. Canonical normalisation is explicit and deterministic. Validation defects are never silently repaired; they are recorded and surfaced. Data that passes validation is stored as trusted bars, available for downstream use.
 
 An earnings gap screener is included as the first downstream consumer of the validated data.
 
@@ -294,8 +294,6 @@ Integration tests use testcontainers to spin up a real PostgreSQL instance.
 ## Reproducibility
 
 Ingestion results are deterministic for the same ticker universe, interval, date range, and provider response. The validation suite produces the same defect records for the same input.
-
-The earnings gap screener uses a configurable random seed for any stochastic operations.
 
 ---
 
