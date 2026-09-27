@@ -59,6 +59,7 @@ class IngestionBatchRepository:
 
         model.source = batch.source
         model.requested_range = batch.requested_range
+        model.exchange = batch.exchange
         model.started_at = batch.started_at or datetime.now(UTC)
         model.completed_at = batch.completed_at
         model.status = batch.status.value
@@ -82,12 +83,20 @@ class IngestionBatchRepository:
         )
         return [self._to_domain(model) for model in self._session.scalars(statement)]
 
+    def delete(self, batch_id: uuid.UUID) -> None:
+        model = self._session.get(IngestionBatchModel, batch_id)
+        if model is not None:
+            self._session.delete(model)
+
     @staticmethod
     def _to_model(batch: IngestionBatch) -> IngestionBatchModel:
         return IngestionBatchModel(
             batch_id=batch.batch_id,
             source=batch.source,
             requested_range=batch.requested_range,
+            ticker_universe=batch.ticker_universe,
+            interval=batch.interval,
+            exchange=batch.exchange,
             started_at=batch.started_at or datetime.now(UTC),
             completed_at=batch.completed_at,
             status=batch.status.value,
@@ -106,6 +115,9 @@ class IngestionBatchRepository:
             batch_id=model.batch_id,
             source=model.source,
             requested_range=model.requested_range,
+            ticker_universe=getattr(model, "ticker_universe", "") or "",
+            interval=getattr(model, "interval", "") or "",
+            exchange=model.exchange,
             started_at=model.started_at,
             completed_at=model.completed_at,
             status=BatchStatus(model.status),
@@ -133,6 +145,11 @@ class ValidationIssueRepository:
             .order_by(ValidationIssueModel.id)
         )
         return [self._to_domain(model) for model in self._session.scalars(statement)]
+
+    def delete_by_batch(self, batch_id: uuid.UUID) -> None:
+        statement = select(ValidationIssueModel).where(ValidationIssueModel.batch_id == batch_id)
+        for model in self._session.scalars(statement):
+            self._session.delete(model)
 
     @staticmethod
     def _to_model(issue: ValidationIssue) -> ValidationIssueModel:
@@ -163,21 +180,31 @@ class MarketBarRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def upsert_all(self, bars: list[MarketBar]) -> int:
-        """Insert bars; return count of idempotent conflicts ignored."""
+    def upsert_all(self, bars: list[MarketBar], chunk_size: int = 500) -> int:
+        """Insert bars in chunks; return count of idempotent conflicts ignored."""
         if not bars:
             return 0
 
-        rows = [self._to_row(bar) for bar in bars]
-        statement = (
-            insert(MarketBarModel)
-            .values(rows)
-            .on_conflict_do_nothing(index_elements=["ticker", "timestamp", "interval", "source"])
-            .returning(MarketBarModel.id)
-        )
-        result = cast(CursorResult[object], self._session.execute(statement))
-        inserted_count = len(result.fetchall())
-        return len(bars) - inserted_count
+        conflicts = 0
+        for i in range(0, len(bars), chunk_size):
+            chunk = bars[i : i + chunk_size]
+            rows = [self._to_row(bar) for bar in chunk]
+            statement = (
+                insert(MarketBarModel)
+                .values(rows)
+                .on_conflict_do_nothing(
+                    index_elements=["ticker", "timestamp", "interval", "source"]
+                )
+                .returning(MarketBarModel.id)
+            )
+            result = cast(CursorResult[object], self._session.execute(statement))
+            inserted_count = len(result.fetchall())
+            conflicts += len(chunk) - inserted_count
+        return conflicts
+
+    def list_tickers(self) -> list[str]:
+        statement = select(MarketBarModel.ticker).distinct().order_by(MarketBarModel.ticker)
+        return list(self._session.scalars(statement))
 
     def list_by_ticker(
         self,
@@ -241,15 +268,20 @@ class ScreenerQueryRepository:
         start: datetime,
         end: datetime,
         lookback_days: int,
+        interval: str | None = None,
     ) -> list[MarketBar]:
+        conditions = [
+            MarketBarModel.ticker.in_(tickers),
+            MarketBarModel.timestamp >= start,
+            MarketBarModel.timestamp <= end,
+            MarketBarModel.validated.is_(True),
+        ]
+        if interval is not None:
+            conditions.append(MarketBarModel.interval == interval)
+
         statement = (
             select(MarketBarModel)
-            .where(
-                MarketBarModel.ticker.in_(tickers),
-                MarketBarModel.timestamp >= start,
-                MarketBarModel.timestamp <= end,
-                MarketBarModel.validated.is_(True),
-            )
+            .where(*conditions)
             .order_by(MarketBarModel.ticker, MarketBarModel.timestamp)
         )
         return [MarketBarRepository._to_domain(model) for model in self._session.scalars(statement)]
