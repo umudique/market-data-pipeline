@@ -50,3 +50,29 @@ def test_price_validator_flags_negative_close() -> None:
 
 def test_price_validator_returns_zero_issues_for_positive_ohlc() -> None:
     assert PriceValidator().validate([_record()], batch_id=uuid.uuid4(), source="yfinance") == []
+
+
+def test_price_validator_flags_ohlc_inconsistency_when_high_below_low() -> None:
+    batch_id = uuid.uuid4()
+
+    issues = PriceValidator().validate(
+        [_record(high=98.0, low=99.0)],
+        batch_id=batch_id,
+        source="yfinance",
+    )
+
+    assert len(issues) == 1
+    assert issues[0].issue_type is IssueType.OHLC_INCONSISTENCY
+    assert issues[0].severity is IssueSeverity.ERROR
+    assert issues[0].ticker == "AAPL"
+    assert issues[0].batch_id == batch_id
+
+
+def test_price_validator_does_not_flag_ohlc_inconsistency_when_high_equals_low() -> None:
+    issues = PriceValidator().validate(
+        [_record(high=100.0, low=100.0)],
+        batch_id=uuid.uuid4(),
+        source="yfinance",
+    )
+
+    assert issues == []

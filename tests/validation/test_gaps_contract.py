@@ -56,3 +56,45 @@ def test_interval_gap_detector_returns_zero_issues_for_complete_sequence() -> No
         )
         == []
     )
+
+
+def test_interval_gap_detector_skips_weekends_for_daily_interval() -> None:
+    # 2026-01-02 (Fri), 2026-01-05 (Mon) — weekend days (Sat/Sun) must not be flagged
+    records = [
+        {"ticker": "AAPL", "timestamp": datetime(2026, 1, 2, tzinfo=UTC)},
+        {"ticker": "AAPL", "timestamp": datetime(2026, 1, 5, tzinfo=UTC)},
+    ]
+
+    issues = IntervalGapDetector().detect(
+        records,
+        interval="1d",
+        expected_start=datetime(2026, 1, 2, tzinfo=UTC),
+        expected_end=datetime(2026, 1, 5, tzinfo=UTC),
+        ticker="AAPL",
+        batch_id=uuid.uuid4(),
+        source="yfinance",
+    )
+
+    assert issues == []
+
+
+def test_interval_gap_detector_flags_missing_weekday_in_daily_interval() -> None:
+    # Mon 2026-01-05 is missing between Fri 2026-01-02 and Tue 2026-01-06
+    records = [
+        {"ticker": "AAPL", "timestamp": datetime(2026, 1, 2, tzinfo=UTC)},
+        {"ticker": "AAPL", "timestamp": datetime(2026, 1, 6, tzinfo=UTC)},
+    ]
+
+    issues = IntervalGapDetector().detect(
+        records,
+        interval="1d",
+        expected_start=datetime(2026, 1, 2, tzinfo=UTC),
+        expected_end=datetime(2026, 1, 6, tzinfo=UTC),
+        ticker="AAPL",
+        batch_id=uuid.uuid4(),
+        source="yfinance",
+    )
+
+    assert len(issues) == 1
+    assert issues[0].issue_type is IssueType.MISSING_INTERVAL
+    assert issues[0].timestamp.date() == datetime(2026, 1, 5, tzinfo=UTC).date()
