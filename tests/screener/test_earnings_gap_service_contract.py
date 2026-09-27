@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -27,9 +27,18 @@ class FakeRepository:
         start: datetime,
         end: datetime,
         lookback_days: int,
+        interval: str = "1d",
     ) -> list[MarketBar]:
         self.calls.append((tickers, start, end, lookback_days))
         return self.bars
+
+
+@dataclass
+class FakeCalendarFetcher:
+    gap_dates: dict[str, set[date]] = field(default_factory=dict)
+
+    def fetch_gap_dates(self, ticker: str, start: date, end: date) -> set[date]:
+        return self.gap_dates.get(ticker, set())
 
 
 def _bar(
@@ -67,8 +76,9 @@ def _request() -> EarningsGapScreenerRequest:
 
 def test_earnings_gap_query_service_returns_empty_list_from_empty_repository() -> None:
     repository = FakeRepository(bars=[])
+    calendar = FakeCalendarFetcher(gap_dates={"AAPL": {date(2026, 1, 2)}})
 
-    result = EarningsGapQueryService(repository).run(_request())
+    result = EarningsGapQueryService(repository, calendar).run(_request())
 
     assert result == []
     assert repository.calls == [
@@ -87,8 +97,9 @@ def test_earnings_gap_query_service_computes_metrics_via_calculators() -> None:
     prior = _bar("AAPL", datetime(2026, 1, 1, tzinfo=UTC), 95.0, 100.0, 1_000_000.0)
     earnings = _bar("AAPL", datetime(2026, 1, 2, tzinfo=UTC), 110.0, 115.5, 2_000_000.0)
     repository = FakeRepository(bars=[prior, earnings])
+    calendar = FakeCalendarFetcher(gap_dates={"AAPL": {date(2026, 1, 2)}})
 
-    results = EarningsGapQueryService(repository).run(_request())
+    results = EarningsGapQueryService(repository, calendar).run(_request())
 
     earnings_row = next(r for r in results if r.date == datetime(2026, 1, 2, tzinfo=UTC))
     assert earnings_row.ticker == "AAPL"
@@ -101,7 +112,8 @@ def test_earnings_gap_query_service_computes_metrics_via_calculators() -> None:
 def test_earnings_gap_query_service_results_contain_only_validated_bars() -> None:
     bar = _bar("AAPL", datetime(2026, 1, 2, tzinfo=UTC), 100.0, 105.0, 1_000_000.0)
     repository = FakeRepository(bars=[bar])
+    calendar = FakeCalendarFetcher(gap_dates={"AAPL": {date(2026, 1, 2)}})
 
-    results = EarningsGapQueryService(repository).run(_request())
+    results = EarningsGapQueryService(repository, calendar).run(_request())
 
     assert all(row.validated for row in results)
