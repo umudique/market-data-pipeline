@@ -30,6 +30,9 @@ class IngestionBatchManager:
         batch = IngestionBatch(
             source=request.source,
             requested_range=f"{request.start_time.isoformat()}/{request.end_time.isoformat()}",
+            ticker_universe=",".join(request.ticker_universe),
+            interval=request.interval,
+            exchange=request.exchange,
             started_at=self._clock(),
             status=BatchStatus.PENDING,
         )

@@ -66,6 +66,8 @@ class StalenessDetectorProtocol(Protocol):
         self,
         response_bars: list[dict[str, object]],
         requested_end: datetime,
+        interval: str = "1m",
+        exchange: str | None = None,
     ) -> bool: ...
 
 
@@ -89,6 +91,15 @@ class ValidationHandoffProtocol(Protocol):
     ) -> tuple[dict[str, int], list[ValidationIssue]]: ...
 
 
+class NormalizationHandoffProtocol(Protocol):
+    def normalize_and_store(
+        self,
+        batch: IngestionBatch,
+        records: list[dict[str, object]],
+        issues: list[ValidationIssue],
+    ) -> int: ...
+
+
 class IngestionCoordinator:
     """Orchestrate one ingestion request without crossing layer boundaries."""
 
@@ -102,6 +113,7 @@ class IngestionCoordinator:
         raw_writer: RawWriterProtocol,
         validation_handoff: ValidationHandoffProtocol,
         issue_store: IssueStoreProtocol,
+        normalization_handoff: NormalizationHandoffProtocol | None = None,
     ) -> None:
         self._batch_manager = batch_manager
         self._rate_limit = rate_limit
@@ -111,6 +123,7 @@ class IngestionCoordinator:
         self._raw_writer = raw_writer
         self._validation_handoff = validation_handoff
         self._issue_store = issue_store
+        self._normalization_handoff = normalization_handoff
 
     def run(self, request: IngestionRequest) -> IngestionBatch:
         """Run the ingestion sequence and return the final batch state."""
@@ -135,10 +148,20 @@ class IngestionCoordinator:
                     request.start_time,
                     request.end_time,
                 )
-                is_stale = self._staleness_detector.is_stale(records, request.end_time)
+                is_stale = self._staleness_detector.is_stale(
+                    records,
+                    request.end_time,
+                    interval=request.interval,
+                    exchange=request.exchange,
+                )
                 self._raw_writer.write_batch(batch, records)
                 counts, issues = self._validation_handoff.validate(batch, records)
                 self._issue_store.save_all(issues)
+                if self._normalization_handoff is not None:
+                    norm_conflicts = self._normalization_handoff.normalize_and_store(
+                        batch, records, issues
+                    )
+                    totals["idempotent_conflicts"] += norm_conflicts
 
                 totals["received"] += len(records)
                 totals["valid"] += counts["valid"]
