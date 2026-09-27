@@ -13,6 +13,7 @@ class IssueType(StrEnum):
     MISSING_INTERVAL = "MISSING_INTERVAL"
     INVALID_TIMESTAMP = "INVALID_TIMESTAMP"
     INVALID_PRICE = "INVALID_PRICE"
+    OHLC_INCONSISTENCY = "OHLC_INCONSISTENCY"
     MISSING_OBSERVATION = "MISSING_OBSERVATION"
     TIMEZONE_NORMALIZATION_REQUIRED = "TIMEZONE_NORMALIZATION_REQUIRED"
     STALE_RESPONSE = "STALE_RESPONSE"
@@ -43,6 +44,9 @@ class IngestionRequest:
     start_time: datetime
     end_time: datetime
     source: str
+    exchange: str | None = None
+    custom_url: str | None = None
+    api_key: str | None = None
 
 
 @dataclass
@@ -50,6 +54,9 @@ class IngestionBatch:
     batch_id: uuid.UUID = field(default_factory=uuid.uuid4)
     source: str = ""
     requested_range: str = ""
+    ticker_universe: str = ""
+    interval: str = ""
+    exchange: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     status: BatchStatus = BatchStatus.PENDING
