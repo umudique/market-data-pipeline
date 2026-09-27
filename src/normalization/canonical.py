@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from src.domain import MarketBar, ValidationStatus
@@ -15,9 +16,16 @@ class RecordCanonicalizer:
         batch_id: uuid.UUID,
         source: str,
     ) -> MarketBar:
+        ts = record["timestamp"]
+        if (
+            isinstance(ts, datetime)
+            and ts.tzinfo is not None
+            and ts.utcoffset() != UTC.utcoffset(ts)
+        ):
+            ts = ts.astimezone(UTC)
         return MarketBar(
             ticker=str(record["ticker"]),
-            timestamp=record["timestamp"],
+            timestamp=ts,
             interval=str(record["interval"]),
             open=float(record["open"]),
             high=float(record["high"]),

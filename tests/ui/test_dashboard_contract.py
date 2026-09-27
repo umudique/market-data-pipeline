@@ -179,7 +179,7 @@ def test_ingestion_kpi_strip_contains_five_required_fields() -> None:
     assert ingestion_kpi_fields() == [
         "Rows received",
         "Valid rows",
-        "Issues detected",
+        "Errors detected",
         "Rows persisted",
         "Duplicates blocked",
     ]

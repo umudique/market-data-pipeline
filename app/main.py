@@ -382,7 +382,7 @@ def ingestion_kpi_fields() -> list[str]:
     return [
         "Rows received",
         "Valid rows",
-        "Issues detected",
+        "Errors detected",
         "Rows persisted",
         "Duplicates blocked",
     ]
@@ -520,10 +520,11 @@ def _render_ingestion_outcome(response: IngestionBatchResponseSchema) -> None:
         + response.duplicate_count
         + response.stale_response_count
     )
+    rows_persisted = response.records_received - response.idempotent_conflict_count
     c1.metric("Rows received", response.records_received)
     c2.metric("Valid rows", response.records_valid)
-    c3.metric("Issues detected", total_issues)
-    c4.metric("Rows persisted", response.records_valid)
+    c3.metric("Errors detected", total_issues)
+    c4.metric("Rows persisted", rows_persisted)
     c5.metric("Duplicates blocked", response.duplicate_count)
 
 
@@ -1187,8 +1188,10 @@ def _render_ingestion_summary_strip(
     )
     c2.metric("Rows received", f"{response.records_received:,}")
     c3.metric("Valid rows", f"{response.records_valid:,}")
-    c4.metric("Issues detected", f"{total_issues:,}")
-    c5.metric("Rows persisted", f"{response.records_valid:,}")
+    c4.metric("Errors detected", f"{total_issues:,}")
+    c5.metric(
+        "Rows persisted", f"{response.records_received - response.idempotent_conflict_count:,}"
+    )
     c6.metric("Duplicates blocked", f"{response.duplicate_count:,}")
     c7.metric("Tickers", ticker_label)
     st.divider()
