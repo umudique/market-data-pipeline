@@ -154,9 +154,13 @@ html, body, [class*="css"] {
     font-family: 'IBM Plex Sans', sans-serif !important;
     font-weight: 400;
 }
-h1, h2, h3, h4,
+h1, .stTitle {
+    font-family: 'IBM Plex Sans', sans-serif !important;
+    font-weight: 700 !important;
+}
+h2, h3, h4,
 [data-testid="stHeading"],
-.stSubheader, .stTitle {
+.stSubheader {
     font-family: 'IBM Plex Sans', sans-serif !important;
     font-weight: 600 !important;
 }
@@ -170,17 +174,20 @@ code, pre, .stCodeBlock {
 [data-testid="stMetricValue"],
 .metric-value {
     font-size: 1.55rem !important;
-    font-weight: 400 !important;
+    font-weight: 600 !important;
 }
 [data-testid="stMetricLabel"],
 .metric-label {
     font-size: 0.85rem !important;
-    font-weight: 400 !important;
+    font-weight: 600 !important;
 }
 .metric-value.bold { font-weight: 700 !important; }
 table td, table th {
     font-family: 'IBM Plex Mono', monospace !important;
     font-size: 0.82rem !important;
+}
+table th {
+    font-weight: 600 !important;
 }
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stMarkdownContainer"] strong { margin-bottom: 0 !important; }
@@ -1055,6 +1062,8 @@ def _render_db_ticker_browser() -> None:
 def _render_ingestion_form_view() -> None:
     _, form_col, _ = st.columns([1, 3, 1])
     with form_col:
+        st.title("Market Data Pipeline")
+        st.caption("Ingest OHLCV data, validate quality, and screen for earnings gaps.")
         _render_db_ticker_browser()
         with st.form("ingestion-form"):
             st.text_area(
