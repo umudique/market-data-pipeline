@@ -54,7 +54,7 @@ The pipeline's purpose is to make these failures explicit and traceable, not to 
 
 **Verdict: PASSED**
 
-All 564 records passed validation. Timezone normalisation was flagged at INFO severity (consistent with the Methodology table below) (timestamps converted to UTC) — this is not an error and does not affect the verdict. On the second run, all 564 records were blocked as duplicates of already-persisted bars, confirming idempotent writes.
+All 564 records passed validation. Timezone normalisation was flagged at INFO severity — timestamps were converted to UTC. This is not an error and does not affect the verdict. On the second run, all 564 records were blocked as duplicates of already-persisted bars, confirming idempotent writes.
 
 ---
 
