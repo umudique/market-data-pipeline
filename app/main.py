@@ -685,7 +685,7 @@ def _render_idempotency_proof() -> bool:
         st.caption(
             "Re-run with identical parameters to see the idempotency proof. "
             "On a correct second run, Rows persisted = 0 and "
-            "Duplicates blocked = first-run canonical rows."
+            "Duplicates blocked = first-run row count."
         )
         return bool(rerun)
 
@@ -710,12 +710,15 @@ _IDEMPOTENCY_ROWS = [
     "Valid rows",
     "Rows persisted",
     "Duplicates blocked",
-    "Idempotency matches",
 ]
 
 
 def _idempotency_values(response: object) -> list[object]:
-    """Extract the five idempotency spec rows from a stored response."""
+    """Extract idempotency spec rows from a stored response.
+
+    'Duplicates blocked' is the count of records already present in the DB
+    (idempotent_conflict_count), not within-batch candle duplicates.
+    """
     if isinstance(response, IngestionBatchResponseSchema):
         conflicts = getattr(response, "idempotent_conflict_count", 0)
         persisted = response.records_received - conflicts
@@ -723,7 +726,6 @@ def _idempotency_values(response: object) -> list[object]:
             response.records_received,
             response.records_valid,
             persisted,
-            response.duplicate_count,
             conflicts,
         ]
     if isinstance(response, dict):
@@ -733,10 +735,9 @@ def _idempotency_values(response: object) -> list[object]:
             received,
             response.get("records_valid"),
             received - conflicts,
-            response.get("duplicate_count"),
             conflicts,
         ]
-    return [None] * 5
+    return [None] * 4
 
 
 def _render_bars_per_day_chart(market_data: dict[str, object]) -> None:
