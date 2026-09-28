@@ -20,6 +20,7 @@ class IssueType(StrEnum):
 
 
 class IssueSeverity(StrEnum):
+    INFO = "INFO"
     WARNING = "WARNING"
     ERROR = "ERROR"
 

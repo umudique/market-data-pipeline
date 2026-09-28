@@ -47,14 +47,14 @@ The pipeline's purpose is to make these failures explicit and traceable, not to 
 
 | Metric | First run | Second run |
 |---|---|---|
-| Records received | 564 | 564 |
-| Valid records | 564 | 564 |
+| Rows received | 564 | 564 |
+| Valid rows | 564 | 564 |
 | Rows persisted | 564 | 0 |
 | Duplicates blocked | 0 | 564 |
 
 **Verdict: PASSED**
 
-All 564 records passed validation. Timezone normalisation was flagged at INFO severity (timestamps converted to UTC) — this is not an error and does not affect the verdict. On the second run, all 564 records were blocked as duplicates of already-persisted bars, confirming idempotent writes.
+All 564 records passed validation. Timezone normalisation was flagged at INFO severity (consistent with the Methodology table below) (timestamps converted to UTC) — this is not an error and does not affect the verdict. On the second run, all 564 records were blocked as duplicates of already-persisted bars, confirming idempotent writes.
 
 ---
 

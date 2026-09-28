@@ -20,4 +20,5 @@ htmlcov/
 
 # Agent operational documents — local only
 /AGENTS.md
-/docs/
+/docs/*
+!/docs/images/

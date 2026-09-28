@@ -23,7 +23,7 @@ def test_timezone_validator_flags_non_utc_timezone() -> None:
 
     assert len(issues) == 1
     assert issues[0].issue_type is IssueType.TIMEZONE_NORMALIZATION_REQUIRED
-    assert issues[0].severity is IssueSeverity.WARNING
+    assert issues[0].severity is IssueSeverity.INFO
     assert issues[0].ticker == "AAPL"
     assert issues[0].timestamp == timestamp
     assert issues[0].batch_id == batch_id

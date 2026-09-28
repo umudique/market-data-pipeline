@@ -30,7 +30,7 @@ class TimezoneValidator:
                     issues.append(
                         ValidationIssue(
                             issue_type=IssueType.TIMEZONE_NORMALIZATION_REQUIRED,
-                            severity=IssueSeverity.WARNING,
+                            severity=IssueSeverity.INFO,
                             ticker=str(record.get("ticker", "")),
                             timestamp=timestamp,
                             batch_id=batch_id,
