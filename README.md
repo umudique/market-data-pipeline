@@ -43,20 +43,18 @@ The pipeline's purpose is to make these failures explicit and traceable, not to 
 
 ## Example Result
 
-**Demo:** AAPL, MSFT, SPY · daily · 2024-01-01 to 2024-09-30
+**Demo:** NVDA, MSFT, AAPL · daily · 2024-01-01 to 2024-09-30 · NASDAQ
 
-| Metric | Value |
-|---|---|
-| Records received | 567 |
-| Records valid | 561 |
-| Duplicate bars | 0 |
-| Missing intervals | 4 |
-| Stale responses | 2 |
-| Invalid prices | 0 |
+| Metric | First run | Second run |
+|---|---|---|
+| Records received | 564 | 564 |
+| Valid records | 564 | 564 |
+| Rows persisted | 564 | 0 |
+| Duplicates blocked | 0 | 564 |
 
-**Verdict: PASSED WITH ISSUES**
+**Verdict: PASSED**
 
-Four missing intervals were detected across the requested range. Two staleness flags were raised. All defects are recorded with ticker, timestamp, batch ID, and source. Validated bars are available for downstream queries.
+All 564 records passed validation. Timezone normalisation was flagged at INFO severity (timestamps converted to UTC) — this is not an error and does not affect the verdict. On the second run, all 564 records were blocked as duplicates of already-persisted bars, confirming idempotent writes.
 
 ---
 
