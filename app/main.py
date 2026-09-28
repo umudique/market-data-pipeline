@@ -525,7 +525,7 @@ def _render_ingestion_outcome(response: IngestionBatchResponseSchema) -> None:
     c2.metric("Valid rows", response.records_valid)
     c3.metric("Errors detected", total_issues)
     c4.metric("Rows persisted", rows_persisted)
-    c5.metric("Duplicates blocked", response.duplicate_count)
+    c5.metric("Duplicates blocked", response.idempotent_conflict_count)
 
 
 def _render_data_quality(
@@ -1193,7 +1193,7 @@ def _render_ingestion_summary_strip(
     c5.metric(
         "Rows persisted", f"{response.records_received - response.idempotent_conflict_count:,}"
     )
-    c6.metric("Duplicates blocked", f"{response.duplicate_count:,}")
+    c6.metric("Duplicates blocked", f"{response.idempotent_conflict_count:,}")
     c7.metric("Tickers", ticker_label)
     st.divider()
 
